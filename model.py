@@ -57,3 +57,44 @@ class Embedder(nn.Module):
     embedding = embedding.view(Nb,-1,self.K)
 
     return embedding
+
+
+class kmeans(nn.Module):
+
+  def __init__(self,Nc,K):
+
+    # K is dimension and Nc is number of clusters
+    super(kmeans,self).__init__()
+
+    self.Nc = Nc
+    self.K  = K
+
+    self.mu = torch.stack([torch.rand(1,K) for i in range(self.Nc)],dim=0), # We make it Nc, 1 by K for consistency
+
+  def fit(self,X,niter):
+
+    # We will need to flatten the X vector regardless in order to make sure we work not with batches anymore
+
+    X = X.view(1,-1,self.K) # 1,Ns,K
+    
+    for t in range(niter):
+
+      # Perform assignment
+      Dist = torch.sqrt(torch.sum((X-self.mu)**2,-1)) # Nc,Ns
+
+      # Return argmax of this
+      cluster_idx = torch.argmin(Dist,dim=0) # A vector of menmbership (Ns,)
+ 
+      # Reevaluate the cluster center
+      for c in range(self.Nc):
+        
+          # Find the binary mask for each class
+          bool_mask = 
+
+
+
+
+
+
+
+
