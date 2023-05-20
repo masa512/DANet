@@ -69,7 +69,7 @@ class kmeans(nn.Module):
     self.Nc = Nc
     self.K  = K
 
-    self.mu = torch.stack([torch.rand(1,K) for i in range(self.Nc)],dim=0), # We make it Nc, 1 by K for consistency
+    self.mu = torch.stack([torch.rand(1,K) for i in range(self.Nc)],dim=0) # We make it Nc, 1 by K for consistency
 
   def fit(self,X,niter):
 
@@ -78,24 +78,25 @@ class kmeans(nn.Module):
     X = X.view(1,-1,self.K) # 1,Ns,K
     
     for t in range(niter):
-
       # Perform assignment
       Dist = torch.sqrt(torch.sum((X-self.mu)**2,-1)) # Nc,Ns
 
+
       # Return argmax of this
       cluster_idx = torch.argmin(Dist,dim=0) # A vector of menmbership (Ns,)
- 
       # Reevaluate the cluster center
       for c in range(self.Nc):
         
           # Find the binary mask for each class
-          bool_mask = torch.stack([cluster_idx==c for _ in range(self.Nc)],-1)
+          X = X.squeeze(0)
+          bool_mask = torch.stack([cluster_idx==c for _ in range(self.K)],-1)
           subdata = X[bool_mask]
           mu_c = torch.mean(subdata,dim=0).view(1,-1) # 1 by K
           self.mu[c,:,:] = mu_c
       
       # repeat this process for number of iterations
 
+      print(self.mu)
 
 
 
