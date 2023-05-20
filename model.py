@@ -89,7 +89,12 @@ class kmeans(nn.Module):
       for c in range(self.Nc):
         
           # Find the binary mask for each class
-          bool_mask = 
+          bool_mask = torch.stack([cluster_idx==c for _ in range(self.Nc)],-1)
+          subdata = X[bool_mask]
+          mu_c = torch.mean(subdata,dim=0).view(1,-1) # 1 by K
+          self.mu[c,:,:] = mu_c
+      
+      # repeat this process for number of iterations
 
 
 
