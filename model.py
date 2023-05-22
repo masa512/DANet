@@ -61,15 +61,16 @@ class Embedder(nn.Module):
 
 class kmeans(nn.Module):
 
-  def __init__(self,Nc,K):
+  def __init__(self,Nc,K,X):
 
     # K is dimension and Nc is number of clusters
     super(kmeans,self).__init__()
 
     self.Nc = Nc
     self.K  = K
+    self.X = X
 
-    self.mu = torch.stack([torch.rand(1,K) for i in range(self.Nc)],dim=0) # We make it Nc, 1 by K for consistency
+    self.mu = torch.stack([self.X[torch.randint(0,X.shape[0],(1,))] for i in range(self.Nc)],dim=0) # We make it Nc, 1 by K for consistency
 
   def fit(self,X,niter):
 
@@ -90,13 +91,24 @@ class kmeans(nn.Module):
           # Find the binary mask for each class
           X = X.squeeze(0)
           bool_mask = torch.stack([cluster_idx==c for _ in range(self.K)],-1)
-          subdata = X[bool_mask]
+          subdata = X[bool_mask].view(-1,self.K)
           mu_c = torch.mean(subdata,dim=0).view(1,-1) # 1 by K
           self.mu[c,:,:] = mu_c
       
       # repeat this process for number of iterations
 
-      print(self.mu)
+      print(f'Iter{t}:',self.mu)
+
+  def label(self,X):
+
+    # For each data we will label 0 --- K - 1 for each data given
+    # Return tensor (Ns,1) labels
+
+    Dist = torch.sqrt(torch.sum((X-self.mu)**2,-1)) # Nc,Ns
+    cluster_idx = torch.argmin(Dist,dim=0) # A vector of menmbership (Ns,)
+
+    return cluster_idx
+
 
 
 
