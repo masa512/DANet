@@ -1,7 +1,9 @@
+from os import X_OK
 import torch.nn as nn
 import torch
-from torchaudio.transforms import Spectrogram
-import data
+from torchaudio.transforms import Spectrogram,InverseSpectrogram
+import DANet.data as data
+import numpy as np
 
 class Embedder(nn.Module):
 
@@ -113,35 +115,64 @@ class kmeans(nn.Module):
 
 ##################################################################################################
 
-def train(embedder,trainloader,valloader,optimizer,n_epochs,batch_size,eps):
+def train(embedder,trainloader,optimizer,criterion,n_epochs,batch_size,eps=1e-8):
 
   train_loss = []
   stft_trans = Spectrogram(n_fft=1024,onesided=True,return_complex=True)
+  inv_trans = InverseSpectrogram(n_fft=1024,onesided=True)
   for t in range(n_epochs):
+    embedder.train() # train mode
     losses = []
-    for x,y in trainloader:
+    for x,y,fs in trainloader:
+        
+        #=============== Forward Pass ====================
+        losses_b = []
+        optimizer.zero_grad()
 
         # Preprocess
-        data_dict = data.preprocess(x,n_fft = 1024,eps = 1e-8)
+        data_dict = data.preprocess(y,n_fft = 1024,eps = 1e-8)
 
         # Embedding
-        mixture_embedding = embedder(data_dict['sm'])
+        X = data_dict['sm']
+        print(X.shape)
+        Nf = X.shape[-2]
+        Nt = X.shape[-1]
+        V = embedder(X)
 
         # Evaluate the irms needed
-        irm0 = data_dict['irm0'].view(irm0.shape[0],-1)
-        irm1 = data_dict['irm1'].view(irm1.shape[0],-1)
+        irm0 = data_dict['irm0']
+        irm1 = data_dict['irm1']
+        irm0 = irm0.reshape(1,1,-1)
+        irm1 = irm1.reshape(1,1,-1)
 
         # Evaluate activation on each channel
-        A0 = torch.bmm(irm0,mixture_embedding)/torch.sum(irm0,-1) # -1 K
-        A1 = torch.bmm(irm1,mixture_embedding)/torch.sum(irm1,-1) # -1,K
-
+        A0 = torch.bmm(irm0,V)#/torch.sum(irm0,-1) # -1 K
+        A1 = torch.bmm(irm1,V)#/torch.sum(irm1,-1) # -1,K
+        A  = torch.concat([A0,A1],1)
         
         # Evaluate Mask from the attractor points
-        M0 = nn.Softmax(m)
+        M = torch.bmm(A,torch.transpose(V,-1,-2))
+        M = nn.Softmax(dim=1)(M)
+        M = M.view(-1,Nf,Nt)
 
 
+        #=============== Backward Pass ====================
+
+        phase = data_dict['phase']
+
+        # Stacking the filtered signal
+        Y = torch.stack([M[:,c,:,:]*X*torch.exp(1j*phase) for c in range(2)],1)
 
 
+        # Inverse process
+        y0 = inv_trans(Y[:,0,:,:])
+        y1 = inv_trans(Y[:,1,:,:])
 
+        # MSE Loss
+        loss = criterion(x[:,0,:],y0) + criterion(x[:,1,:],y1)
+        optimizer.step()
 
-
+        losses_b.append(loss.item()/batch_size)
+  
+    losses.append(np.mean(losses_b))
+    print(f'===> Epoch {t+1}: Train Loss -> {losses[-1]}')
