@@ -135,8 +135,9 @@ def train(embedder,trainloader,valloader,optimizer,n_epochs,batch_size,eps):
         A0 = torch.bmm(irm0,mixture_embedding)/torch.sum(irm0,-1) # -1 K
         A1 = torch.bmm(irm1,mixture_embedding)/torch.sum(irm1,-1) # -1,K
 
+        
         # Evaluate Mask from the attractor points
-        M0 = nn.Softmax(torch.stack([A0,A1]))
+        M0 = nn.Softmax(m)
 
 
 
