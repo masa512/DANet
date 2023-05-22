@@ -1,5 +1,7 @@
 import torch.nn as nn
 import torch
+from torchaudio.transforms import Spectrogram
+import data
 
 class Embedder(nn.Module):
 
@@ -109,6 +111,32 @@ class kmeans(nn.Module):
 
     return cluster_idx
 
+##################################################################################################
+
+def train(embedder,trainloader,valloader,optimizer,n_epochs,batch_size,eps):
+
+  train_loss = []
+  stft_trans = Spectrogram(n_fft=1024,onesided=True,return_complex=True)
+  for t in range(n_epochs):
+    losses = []
+    for x,y in trainloader:
+
+        # Preprocess
+        data_dict = data.preprocess(x,n_fft = 1024,eps = 1e-8)
+
+        # Embedding
+        mixture_embedding = embedder(data_dict['sm'])
+
+        # Evaluate the irms needed
+        irm0 = data_dict['irm0'].view(irm0.shape[0],-1)
+        irm1 = data_dict['irm1'].view(irm1.shape[0],-1)
+
+        # Evaluate activation on each channel
+        A0 = torch.bmm(irm0,mixture_embedding)/torch.sum(irm0,-1) # -1 K
+        A1 = torch.bmm(irm1,mixture_embedding)/torch.sum(irm1,-1) # -1,K
+
+        # Evaluate Mask from the attractor points
+        M0 = nn.Softmax(torch.stack([A0,A1]))
 
 
 
