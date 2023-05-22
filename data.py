@@ -68,5 +68,28 @@ class mus_dataset(Dataset):
 
     return X,Y,self.fs
 
+
+def preprocess(x,n_fft = 1024,eps = 1e-8):
+
+    transform = Spectrogram(n_fft=n_fft, onesided=True,return_complex=True)
+    
+    S0 = transform(x[0])
+    S1 = transform(x[1])
+    SM = S0 + S1
+
+    mixture_phase = torch.angle(SM)
+    S0 = abs(S0)
+    S1 = abs(S1)
+    SM = abs(SM)
+
+    # Evaluate IBM
+    irm0 = 1.0 * (abs(S1)<abs(S0))
+    irm1 = 1.0 * (abs(S0)<abs(S1))
+
+    # Make a dictionary of necessary information to return
+
+    d = {'s0': S0, 's1': S1, 'sm': SM,'irm0' : irm0 ,'irm1': irm1, 'phase': mixture_phase}
+
+    return d
     
     
