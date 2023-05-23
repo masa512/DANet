@@ -47,8 +47,8 @@ class Embedder(nn.Module):
 
     # First, we need to define the hidden inputs
     Nb = X.shape[0]
-    h0 = torch.rand(self.num_layers*self.D,Nb,self.Nh)
-    c0 = torch.rand(self.num_layers*self.D,Nb,self.Nh)
+    h0 = torch.rand(self.num_layers*self.D,Nb,self.Nh).cuda()
+    c0 = torch.rand(self.num_layers*self.D,Nb,self.Nh).cuda()
 
     # Swap axis for time and frequency
     X = torch.swapaxes(X,-2,-1)
@@ -117,11 +117,11 @@ class kmeans(nn.Module):
 
 ##################################################################################################
 
-def train(embedder,trainloader,optimizer,criterion,n_epochs,batch_size,eps=1e-8):
+def train(embedder,trainloader,optimizer,scheduler,criterion,n_epochs,batch_size,eps=1e-8):
 
   train_loss = []
-  stft_trans = Spectrogram(n_fft=1024,onesided=True,power=None)
-  inv_trans = InverseSpectrogram(n_fft=1024,onesided=True)
+  stft_trans = Spectrogram(n_fft=1024,onesided=True,power=None).cuda()
+  inv_trans = InverseSpectrogram(n_fft=1024,onesided=True).cuda()
   for t in range(n_epochs):
     print(f"------------epoch{t+1}--------------")
     embedder.train() # train mode
@@ -151,11 +151,10 @@ def train(embedder,trainloader,optimizer,criterion,n_epochs,batch_size,eps=1e-8)
         
 
         # Evaluate activation on each channel
-        A0 = torch.bmm(irm0,V)#/torch.sum(irm0,-1) # -1 K
-        A1 = torch.bmm(irm1,V)#/torch.sum(irm1,-1) # -1,K
+        A0 = torch.bmm(irm0,V)/torch.sum(irm0,-1,keepdims=True) # -1 K
+        A1 = torch.bmm(irm1,V)/torch.sum(irm1,-1,keepdims=True) # -1,K
         A  = torch.concat([A0,A1],1)
 
-        
         
         # Evaluate Mask from the attractor points
         M = torch.bmm(A,torch.transpose(V,-1,-2))
@@ -167,17 +166,18 @@ def train(embedder,trainloader,optimizer,criterion,n_epochs,batch_size,eps=1e-8)
         phase = data_dict['phase'].cuda()
 
         # Stacking the filtered signal
-        Y = torch.stack([M[:,c,:,:]*X*torch.exp(1j*phase) for c in range(2)],1)
-
+        #Y = torch.stack([M[:,c,:,:]*X*torch.exp(1j*phase) for c in range(2)],1)
+        Y = torch.stack([M[:,c,:,:]*X for c in range(2)],1)
         # Inverse process
-        y0 = inv_trans(Y[:,0,:,:])
-        y1 = inv_trans(Y[:,1,:,:])
+        #y0 = inv_trans(Y[:,0,:,:])
+        #y1 = inv_trans(Y[:,1,:,:])
 
         # MSE Loss
-        loss = criterion(inv_trans(stft_trans(x[:,0,:].cuda())),y0) + criterion(inv_trans(stft_trans(x[:,1,:].cuda())),y1)
+        loss = criterion(abs(stft_trans(x[:,0,:].cuda())),Y[:,0,:,:]) + criterion(abs(stft_trans(x[:,1,:].cuda())),Y[:,1,:,:])
+        loss.backward()
         optimizer.step()
 
         losses_b.append(loss.item()/batch_size)
-  
+    scheduler.step()
     losses.append(np.mean(losses_b))
     print(f'===> Epoch {t+1}: Train Loss -> {losses[-1]}')
