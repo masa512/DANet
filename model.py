@@ -4,6 +4,8 @@ import torch
 from torchaudio.transforms import Spectrogram,InverseSpectrogram
 import DANet.data as data
 import numpy as np
+from tqdm import tqdm
+
 
 class Embedder(nn.Module):
 
@@ -118,58 +120,61 @@ class kmeans(nn.Module):
 def train(embedder,trainloader,optimizer,criterion,n_epochs,batch_size,eps=1e-8):
 
   train_loss = []
-  stft_trans = Spectrogram(n_fft=1024,onesided=True,return_complex=True)
+  stft_trans = Spectrogram(n_fft=1024,onesided=True,power=None)
   inv_trans = InverseSpectrogram(n_fft=1024,onesided=True)
   for t in range(n_epochs):
+    print(f"------------epoch{t+1}--------------")
     embedder.train() # train mode
     losses = []
-    for x,y,fs in trainloader:
+    for x,y,fs in tqdm(trainloader):
         
         #=============== Forward Pass ====================
         losses_b = []
         optimizer.zero_grad()
 
         # Preprocess
-        data_dict = data.preprocess(y,n_fft = 1024,eps = 1e-8)
+        data_dict = data.preprocess(x,y,n_fft = 1024,eps = 1e-8)
 
         # Embedding
-        X = data_dict['sm']
-        print(X.shape)
+        X = data_dict['sm'].cuda()
         Nf = X.shape[-2]
         Nt = X.shape[-1]
+        Nb = X.shape[0]
         V = embedder(X)
 
         # Evaluate the irms needed
         irm0 = data_dict['irm0']
         irm1 = data_dict['irm1']
-        irm0 = irm0.reshape(1,1,-1)
-        irm1 = irm1.reshape(1,1,-1)
+        irm0 = irm0.reshape(Nb,1,-1).cuda()
+        irm1 = irm1.reshape(Nb,1,-1).cuda()
+
+        
 
         # Evaluate activation on each channel
         A0 = torch.bmm(irm0,V)#/torch.sum(irm0,-1) # -1 K
         A1 = torch.bmm(irm1,V)#/torch.sum(irm1,-1) # -1,K
         A  = torch.concat([A0,A1],1)
+
+        
         
         # Evaluate Mask from the attractor points
         M = torch.bmm(A,torch.transpose(V,-1,-2))
         M = nn.Softmax(dim=1)(M)
-        M = M.view(-1,Nf,Nt)
-
+        M = M.view(-1,2,Nf,Nt)
 
         #=============== Backward Pass ====================
 
-        phase = data_dict['phase']
+        phase = data_dict['phase'].cuda()
 
         # Stacking the filtered signal
         Y = torch.stack([M[:,c,:,:]*X*torch.exp(1j*phase) for c in range(2)],1)
-
 
         # Inverse process
         y0 = inv_trans(Y[:,0,:,:])
         y1 = inv_trans(Y[:,1,:,:])
 
         # MSE Loss
-        loss = criterion(x[:,0,:],y0) + criterion(x[:,1,:],y1)
+        loss = criterion(inv_trans(stft_trans(x[:,0,:].cuda())),y0) + criterion(inv_trans(stft_trans(x[:,1,:].cuda())),y1)
         optimizer.step()
 
         losses_b.append(loss.item()/batch_size)
