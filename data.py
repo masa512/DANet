@@ -69,12 +69,13 @@ class mus_dataset(Dataset):
     return X,Y,self.fs
 
 
-def preprocess(x,n_fft = 1024,eps = 1e-8):
+def preprocess(x,y,n_fft = 1024,eps = 1e-8):
 
-    transform = Spectrogram(n_fft=n_fft, onesided=True,return_complex=True)
+
+    transform = Spectrogram(n_fft=n_fft, onesided=True,power=None)
     
-    S0 = transform(x[0])
-    S1 = transform(x[1])
+    S0 = transform(x[:,0,:])
+    S1 = transform(x[:,1,:])
     SM = S0 + S1
 
     mixture_phase = torch.angle(SM)
